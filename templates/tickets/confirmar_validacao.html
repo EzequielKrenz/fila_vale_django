@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirmar voucher{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+    <div class="eyebrow">Validação de refeição</div>
+    <h1>Ticket #{{ ticket.id }}</h1>
+
+    <div class="ticket-grid single-column">
+        <div>
+            <span class="label">Status</span>
+            <strong>{{ ticket.get_status_display }}</strong>
+        </div>
+
+        <div>
+            <span class="label">QR expira</span>
+            <strong>{{ ticket.qr_expira_em|date:"d/m/Y H:i:s" }}</strong>
+        </div>
+
+        <div>
+            <span class="label">Validação</span>
+            <strong>
+                {% if ticket.qr_validado_em %}
+                    Já validado
+                {% elif ticket.qr_valido %}
+                    QR válido
+                {% else %}
+                    QR expirado
+                {% endif %}
+            </strong>
+        </div>
+    </div>
+
+    {% if not ticket.qr_validado_em and ticket.qr_valido %}
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn success full">
+                Confirmar consumo da refeição
+            </button>
+        </form>
+    {% else %}
+        <a href="{% url 'validacao_qr' %}" class="btn secondary full">
+            Voltar
+        </a>
+    {% endif %}
+</div>
+{% endblock %}

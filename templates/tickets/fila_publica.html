@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Fila de pedidos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Acompanhamento</div>
+        <h1>Fila de pedidos</h1>
+    </div>
+    <span class="live-pill">Atualização automática</span>
+</div>
+
+<div class="queue-layout">
+    <section class="card current-card">
+        <h2>Chamando agora</h2>
+
+        {% if chamado %}
+            <div class="big-ticket">#{{ chamado.id }}</div>
+            {% if chamado.id == meu_ticket_id %}
+                <strong class="my-ticket-label">Este é o seu ticket</strong>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">Nenhum ticket chamado no momento.</div>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Prontos para retirada</h2>
+
+        {% if prontos %}
+            <div class="ticket-list">
+                {% for ticket in prontos %}
+                    <div class="queue-item ready-item {% if ticket.id == meu_ticket_id %}my-ticket{% endif %}">
+                        <strong>Ticket #{{ ticket.id }}</strong>
+                        <span>PRONTO</span>
+                        {% if ticket.id == meu_ticket_id %}
+                            <span class="my-ticket-label">Seu ticket</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">Nenhum pedido pronto.</div>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <div class="section-title-row">
+        <h2>Aguardando</h2>
+        <span class="counter">{{ aguardando|length }}</span>
+    </div>
+
+    {% if aguardando %}
+        <div class="ticket-list">
+            {% for ticket in aguardando %}
+                <div class="queue-item {% if ticket.id == meu_ticket_id %}my-ticket{% endif %}">
+                    <span class="position">{{ forloop.counter }}º</span>
+                    <strong>Ticket #{{ ticket.id }}</strong>
+                    {% if ticket.id == meu_ticket_id %}
+                        <span class="my-ticket-label">Seu ticket</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">Fila vazia.</div>
+    {% endif %}
+</section>
+
+<p class="privacy-note">
+    Por privacidade, esta tela pública exibe apenas números de ticket.
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    setTimeout(() => {
+        window.location.reload();
+    }, 5000);
+</script>
+{% endblock %}

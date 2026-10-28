@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Validar QR Code{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+    <div class="eyebrow">Cantina</div>
+    <h1>Validar refeição</h1>
+
+    <p class="muted">
+        Ao escanear o QR Code com a câmera do celular, o navegador abrirá
+        diretamente a tela de confirmação. Também é possível informar o token
+        manualmente abaixo.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.token.label_tag }}
+        {{ form.token }}
+        <button type="submit" class="btn primary full">
+            Localizar voucher
+        </button>
+    </form>
+</div>
+{% endblock %}

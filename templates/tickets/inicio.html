@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Entrar na fila{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+    <div class="eyebrow">Vale-alimentação</div>
+    <h1>Entrar na fila</h1>
+
+    <p class="muted">
+        Digite a chave do seu vale. Após confirmar, seu ticket será colocado
+        na fila por ordem de chegada.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.chave_vale.label_tag }}
+        {{ form.chave_vale }}
+
+        {% for error in form.chave_vale.errors %}
+            <small class="error-text">{{ error }}</small>
+        {% endfor %}
+
+        <button type="submit" class="btn primary full">
+            Gerar ticket
+        </button>
+    </form>
+</div>
+{% endblock %}

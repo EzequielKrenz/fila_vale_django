@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Criar usuário{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+    <div class="eyebrow">Administração</div>
+    <h1>Criar conta de usuário</h1>
+    <p class="muted">
+        Cadastre uma conta comum para que o usuário possa acessar o sistema.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+                <p class="muted">{{ field.help_text }}</p>
+            {% endif %}
+            {% for error in field.errors %}
+                <div class="message error">{{ error }}</div>
+            {% endfor %}
+        {% endfor %}
+
+        {% for error in form.non_field_errors %}
+            <div class="message error">{{ error }}</div>
+        {% endfor %}
+
+        <button type="submit" class="btn primary full">
+            Criar conta
+        </button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Painel das refeições{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Administração</div>
+        <h1>Painel das refeições</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="btn secondary" href="{% url 'validacao_qr' %}">Validar QR</a>
+        <a class="btn secondary" href="{% url 'relatorios' %}">Relatórios</a>
+
+        <form method="post" action="{% url 'chamar_proximo' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn primary">
+                Chamar próximo
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="admin-grid">
+    <section class="card">
+        <div class="section-title-row">
+            <h2>Chamados</h2>
+            <span class="counter">{{ chamados|length }}</span>
+        </div>
+
+        {% if chamados %}
+            {% for ticket in chamados %}
+                <div class="admin-ticket">
+                    <div>
+                        <strong>#{{ ticket.id }}</strong>
+                        <small>Aluno: {{ ticket.usuario.username }}</small>
+                    </div>
+
+                    <form method="post" action="{% url 'marcar_pronto' ticket.id %}">
+                        {% csrf_token %}
+                        <button class="btn success" type="submit">Pronto</button>
+                    </form>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">Nenhum ticket chamado.</div>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <div class="section-title-row">
+            <h2>Prontos</h2>
+            <span class="counter">{{ prontos|length }}</span>
+        </div>
+
+        {% if prontos %}
+            {% for ticket in prontos %}
+                <div class="admin-ticket">
+                    <div>
+                        <strong>#{{ ticket.id }}</strong>
+                        <small>
+                            {% if ticket.qr_validado_em %}
+                                QR validado
+                            {% else %}
+                                Aguardando validação do QR
+                            {% endif %}
+                        </small>
+                    </div>
+
+                    <form method="post" action="{% url 'marcar_retirado' ticket.id %}">
+                        {% csrf_token %}
+                        <button class="btn dark" type="submit">Retirado</button>
+                    </form>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">Nenhum pedido pronto.</div>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <div class="section-title-row">
+        <h2>Fila de espera</h2>
+        <span class="counter">{{ aguardando|length }}</span>
+    </div>
+
+    {% if aguardando %}
+        <div class="ticket-list">
+            {% for ticket in aguardando %}
+                <div class="queue-item">
+                    <span class="position">{{ forloop.counter }}º</span>
+                    <strong>Ticket #{{ ticket.id }}</strong>
+                    <span>{{ ticket.usuario.username }}</span>
+                    <span>{{ ticket.criado_em|date:"H:i:s" }}</span>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">Não há pessoas aguardando.</div>
+    {% endif %}
+</section>
+{% endblock %}

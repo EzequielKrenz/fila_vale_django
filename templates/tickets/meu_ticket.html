@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu ticket{% endblock %}
+
+{% block content %}
+<div class="card ticket-card">
+    <div class="ticket-top">
+        <div>
+            <div class="eyebrow">Seu ticket</div>
+            <h1>#{{ ticket.id }}</h1>
+        </div>
+
+        <span class="status status-{{ ticket.status|lower }}">
+            {{ ticket.get_status_display }}
+        </span>
+    </div>
+
+    <div class="ticket-grid">
+        <div>
+            <span class="label">Usuário</span>
+            <strong>{{ ticket.usuario.username }}</strong>
+        </div>
+
+        <div>
+            <span class="label">Entrada</span>
+            <strong>{{ ticket.criado_em|date:"d/m/Y H:i" }}</strong>
+        </div>
+
+        <div>
+            <span class="label">QR expira</span>
+            <strong>{{ ticket.qr_expira_em|date:"H:i:s" }}</strong>
+        </div>
+    </div>
+
+    {% if ticket.status == 'AGUARDANDO' %}
+        <div class="highlight warning-box">
+            <h2>Você está na posição {{ posicao }}</h2>
+            <p>
+                Existem {{ pessoas_na_frente }} pessoa{{ pessoas_na_frente|pluralize:"s" }}
+                na sua frente.
+            </p>
+            <p>Aguarde o sistema chamar seu ticket.</p>
+        </div>
+    {% elif ticket.status == 'CHAMADO' %}
+        <div class="highlight called-box">
+            <h2>Seu ticket foi chamado!</h2>
+            <p>Apresente o QR Code na cantina para validar a refeição.</p>
+        </div>
+    {% elif ticket.status == 'PRONTO' %}
+        <div class="highlight ready-box">
+            <h2>Seu pedido está pronto.</h2>
+            <p>Apresente o QR Code e retire sua refeição.</p>
+        </div>
+    {% endif %}
+
+    <section class="qr-section">
+        <h2>Voucher QR Code</h2>
+
+        {% if ticket.qr_validado_em %}
+            <div class="message success">
+                Voucher validado em {{ ticket.qr_validado_em|date:"d/m/Y H:i:s" }}.
+            </div>
+        {% else %}
+            <img
+                src="{% url 'qr_code_ticket' %}"
+                alt="QR Code temporário do voucher da refeição"
+                class="qr-image"
+            >
+
+            <p class="muted">
+                QR Code temporário. Em caso de expiração, gere um novo.
+            </p>
+
+            <form method="post" action="{% url 'renovar_qr' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn secondary">
+                    Renovar QR Code
+                </button>
+            </form>
+        {% endif %}
+    </section>
+
+    <a href="{% url 'fila_publica' %}" class="btn secondary">
+        Ver fila geral
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    setTimeout(() => {
+        window.location.reload();
+    }, 5000);
+</script>
+{% endblock %}

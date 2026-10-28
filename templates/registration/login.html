@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+    <h1>Entrar</h1>
+    <p class="muted">Faça login para acessar seu ticket do vale-alimentação.</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <label>Usuário</label>
+        {{ form.username }}
+
+        <label>Senha</label>
+        {{ form.password }}
+
+        {% if form.errors %}
+            <div class="message error">
+                Usuário ou senha inválidos.
+            </div>
+        {% endif %}
+
+        <button type="submit" class="btn primary full">
+            Entrar
+        </button>
+    </form>
+
+    <p class="muted">
+        Ainda não tem uma conta? Solicite a criação ao administrador do sistema.
+    </p>
+</div>
+{% endblock %}

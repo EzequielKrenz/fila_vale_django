@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Gestão</div>
+        <h1>Relatórios de consumo</h1>
+    </div>
+</div>
+
+<div class="report-grid">
+    <div class="card stat-card">
+        <span>Hoje</span>
+        <strong>{{ diario }}</strong>
+        <small>refeições validadas</small>
+    </div>
+
+    <div class="card stat-card">
+        <span>Semana</span>
+        <strong>{{ semanal }}</strong>
+        <small>refeições validadas</small>
+    </div>
+
+    <div class="card stat-card">
+        <span>Mês</span>
+        <strong>{{ mensal }}</strong>
+        <small>refeições validadas</small>
+    </div>
+</div>
+
+<section class="card">
+    <h2>Últimos 7 dias</h2>
+
+    <div class="report-table">
+        <div class="report-row report-head">
+            <span>Dia</span>
+            <span>Consumos</span>
+        </div>
+
+        {% for item in ultimos_7 %}
+            <div class="report-row">
+                <span>{{ item.dia }}</span>
+                <strong>{{ item.total }}</strong>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+
+<p class="privacy-note">
+    Os relatórios gerenciais exibem apenas dados agregados, sem nomes de alunos.
+</p>
+{% endblock %}
