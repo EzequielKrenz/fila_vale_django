@@ -126,13 +126,28 @@ def renovar_qr(request):
 
     ticket = Ticket.objects.filter(
         usuario=request.user
-    ).exclude(status=Ticket.Status.RETIRADO).order_by('-criado_em').first()
+    ).exclude(
+        status=Ticket.Status.RETIRADO
+    ).order_by('-criado_em').first()
 
     if not ticket:
         return redirect('inicio')
 
-    ticket.renovar_qr()
-    messages.success(request, 'QR Code renovado por mais 10 minutos.')
+    # Tenta renovar o QR Code
+    renovado = ticket.renovar_qr()
+
+    if renovado:
+        messages.success(
+            request,
+            'QR Code renovado por mais 10 minutos.'
+        )
+    else:
+        messages.error(
+            request,
+            'Este voucher já foi validado ou retirado. '
+            'Não é possível renovar o QR Code.'
+        )
+
     return redirect('meu_ticket')
 
 
@@ -262,35 +277,70 @@ def validacao_qr(request):
 
 
 @user_passes_test(eh_staff, login_url='login')
-@transaction.atomic
 def validar_token_qr(request, token):
     ticket = get_object_or_404(
-        Ticket.objects.select_for_update(),
+        Ticket,
         token_qr=token
     )
 
     if request.method == 'POST':
-        if ticket.qr_validado_em:
-            messages.error(request, 'Este QR Code já foi validado.')
-        elif not ticket.qr_valido:
-            messages.error(request, 'QR Code expirado. O aluno deve renová-lo.')
-        elif ticket.status not in [Ticket.Status.CHAMADO, Ticket.Status.PRONTO]:
-            messages.error(
-                request,
-                'O ticket ainda não foi chamado. A validação não foi autorizada.'
-            )
-        else:
-            ticket.qr_validado_em = timezone.now()
-            ticket.save(update_fields=['qr_validado_em'])
+        agora = timezone.now()
+
+        # Só valida se todas as condições forem atendidas
+        atualizados = Ticket.objects.filter(
+            pk=ticket.pk,
+            token_qr=token,
+            qr_validado_em__isnull=True,
+            qr_expira_em__gte=agora,
+            status__in=[
+                Ticket.Status.CHAMADO,
+                Ticket.Status.PRONTO
+            ]
+        ).update(
+            qr_validado_em=agora
+        )
+
+        if atualizados == 1:
             messages.success(
                 request,
-                f'Refeição do ticket #{ticket.id} validada com sucesso.'
+                f'Refeição do ticket #{ticket.pk} '
+                'validada com sucesso.'
             )
             return redirect('validacao_qr')
 
-    return render(request, 'tickets/confirmar_validacao.html', {
-        'ticket': ticket
-    })
+        # Busca novamente o estado real do banco
+        ticket.refresh_from_db()
+
+        if ticket.token_qr != token:
+            messages.error(
+                request,
+                'Este QR Code foi substituído por outro.'
+            )
+        elif ticket.qr_validado_em is not None:
+            messages.error(
+                request,
+                'Este QR Code já foi validado.'
+            )
+        elif (
+            ticket.qr_expira_em is None
+            or ticket.qr_expira_em < agora
+        ):
+            messages.error(
+                request,
+                'QR Code expirado. O aluno deve renová-lo.'
+            )
+        else:
+            messages.error(
+                request,
+                'O ticket precisa estar chamado ou pronto '
+                'para permitir a validação.'
+            )
+
+    return render(
+        request,
+        'tickets/confirmar_validacao.html',
+        {'ticket': ticket}
+    )
 
 
 @user_passes_test(eh_staff, login_url='login')

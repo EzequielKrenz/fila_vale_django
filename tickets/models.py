@@ -91,7 +91,29 @@ class Ticket(models.Model):
         )
 
     def renovar_qr(self):
-        self.token_qr = uuid.uuid4()
-        self.qr_expira_em = timezone.now() + timedelta(minutes=10)
-        self.qr_validado_em = None
-        self.save(update_fields=['token_qr', 'qr_expira_em', 'qr_validado_em'])
+        # Gera os novos valores
+        novo_token = uuid.uuid4()
+        nova_expiracao = timezone.now() + timedelta(minutes=10)
+
+        # Atualiza somente tickets que ainda não foram
+        # validados nem retirados
+        atualizados = Ticket.objects.filter(
+            pk=self.pk,
+            qr_validado_em__isnull=True
+        ).exclude(
+            status=self.Status.RETIRADO
+        ).update(
+            token_qr=novo_token,
+            qr_expira_em=nova_expiracao
+        )
+
+        # Se nenhuma linha foi atualizada, a renovação
+        # não estava autorizada
+        if atualizados == 0:
+            return False
+
+        # Sincroniza o objeto em memória
+        self.token_qr = novo_token
+        self.qr_expira_em = nova_expiracao
+
+        return True

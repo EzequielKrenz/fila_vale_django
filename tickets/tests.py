@@ -71,6 +71,82 @@ class TicketWorkflowTests(TestCase):
         self.assertEqual(response.context['diario'], 1)
 
 
+    def test_qr_validado_nao_pode_ser_renovado(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-seguranca-001',
+            status=Ticket.Status.CHAMADO
+        )
+
+        token_original = ticket.token_qr
+
+        # Funcionário valida o voucher
+        self.client.force_login(self.gestor)
+
+        resposta = self.client.post(
+            reverse('validar_token_qr', args=[token_original])
+        )
+        self.assertEqual(resposta.status_code, 302)
+
+        ticket.refresh_from_db()
+        data_validacao = ticket.qr_validado_em
+        self.assertIsNotNone(data_validacao)
+
+        # Aluno tenta renovar o QR já utilizado
+        self.client.force_login(self.aluno)
+
+        resposta = self.client.post(reverse('renovar_qr'))
+        self.assertRedirects(resposta, reverse('meu_ticket'))
+
+        ticket.refresh_from_db()
+
+        # Não pode alterar nem o token nem a validação
+        self.assertEqual(ticket.token_qr, token_original)
+        self.assertEqual(ticket.qr_validado_em, data_validacao)
+
+
+    def test_qr_antigo_nao_funciona_apos_renovacao(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-seguranca-002',
+            status=Ticket.Status.CHAMADO
+        )
+
+        token_antigo = ticket.token_qr
+
+        # Aluno renova o voucher ainda não utilizado
+        self.client.force_login(self.aluno)
+
+        resposta = self.client.post(reverse('renovar_qr'))
+        self.assertRedirects(resposta, reverse('meu_ticket'))
+
+        ticket.refresh_from_db()
+        self.assertNotEqual(ticket.token_qr, token_antigo)
+
+        # Funcionário tenta usar o QR anterior
+        self.client.force_login(self.gestor)
+
+        resposta = self.client.post(
+            reverse('validar_token_qr', args=[token_antigo])
+        )
+
+        # Token antigo não existe mais
+        self.assertEqual(resposta.status_code, 404)
+
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.qr_validado_em)
+
+        # O novo QR continua funcionando
+        resposta = self.client.post(
+            reverse('validar_token_qr', args=[ticket.token_qr])
+        )
+
+        self.assertRedirects(resposta, reverse('validacao_qr'))
+
+        ticket.refresh_from_db()
+        self.assertIsNotNone(ticket.qr_validado_em)
+
+
 class CriarUsuarioTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
