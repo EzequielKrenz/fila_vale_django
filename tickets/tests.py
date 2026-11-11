@@ -1,13 +1,23 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Ticket
 from .services.fila_service import (
     TicketAtivoError,
     ChaveJaUtilizadaError,
     criar_ticket,
+)
+from .services.voucher_service import (
+    VoucherJaValidadoError,
+    VoucherExpiradoError,
+    VoucherNaoAutorizadoError,
+    VoucherAlteradoError,
+    validar_voucher,
 )
 
 
@@ -363,6 +373,95 @@ class TicketWorkflowTests(TestCase):
             ).count(),
             1
         )
+
+
+    def test_servico_valida_voucher(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-voucher-001',
+            status=Ticket.Status.CHAMADO
+        )
+
+        resultado = validar_voucher(ticket)
+
+        self.assertTrue(resultado)
+
+        ticket.refresh_from_db()
+        self.assertIsNotNone(ticket.qr_validado_em)
+
+
+    def test_servico_impede_validacao_duplicada(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-voucher-002',
+            status=Ticket.Status.PRONTO
+        )
+
+        validar_voucher(ticket)
+        primeira_validacao = ticket.qr_validado_em
+
+        with self.assertRaises(VoucherJaValidadoError):
+            validar_voucher(ticket)
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(
+            ticket.qr_validado_em,
+            primeira_validacao
+        )
+
+
+    def test_servico_rejeita_voucher_expirado(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-voucher-003',
+            status=Ticket.Status.CHAMADO
+        )
+
+        Ticket.objects.filter(pk=ticket.pk).update(
+            qr_expira_em=timezone.now() - timedelta(minutes=1)
+        )
+
+        ticket.refresh_from_db()
+
+        with self.assertRaises(VoucherExpiradoError):
+            validar_voucher(ticket)
+
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.qr_validado_em)
+
+
+    def test_servico_rejeita_ticket_aguardando(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-voucher-004',
+            status=Ticket.Status.AGUARDANDO
+        )
+
+        with self.assertRaises(VoucherNaoAutorizadoError):
+            validar_voucher(ticket)
+
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.qr_validado_em)
+
+
+    def test_servico_rejeita_token_renovado(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-voucher-005',
+            status=Ticket.Status.CHAMADO
+        )
+
+        # Outra instância renova o QR no banco
+        outro_ticket = Ticket.objects.get(pk=ticket.pk)
+        self.assertTrue(outro_ticket.renovar_qr())
+
+        # A instância original mantém o token antigo
+        with self.assertRaises(VoucherAlteradoError):
+            validar_voucher(ticket)
+
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.qr_validado_em)
 
 
 class CriarUsuarioTests(TestCase):

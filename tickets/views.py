@@ -20,6 +20,10 @@ from .services.fila_service import (
     buscar_ticket_ativo,
     criar_ticket,
 )
+from .services.voucher_service import (
+    VoucherError,
+    validar_voucher,
+)
 
 
 def eh_staff(user):
@@ -308,63 +312,31 @@ def validacao_qr(request):
 
 @user_passes_test(eh_staff, login_url='login')
 def validar_token_qr(request, token):
+
     ticket = get_object_or_404(
         Ticket,
         token_qr=token
     )
 
     if request.method == 'POST':
-        agora = timezone.now()
+        try:
+            # Serviço aplica as regras de negócio
+            validar_voucher(ticket)
 
-        # Só valida se todas as condições forem atendidas
-        atualizados = Ticket.objects.filter(
-            pk=ticket.pk,
-            token_qr=token,
-            qr_validado_em__isnull=True,
-            qr_expira_em__gte=agora,
-            status__in=[
-                Ticket.Status.CHAMADO,
-                Ticket.Status.PRONTO
-            ]
-        ).update(
-            qr_validado_em=agora
-        )
+        except VoucherError as erro:
+            messages.error(
+                request,
+                str(erro)
+            )
 
-        if atualizados == 1:
+        else:
             messages.success(
                 request,
                 f'Refeição do ticket #{ticket.pk} '
                 'validada com sucesso.'
             )
+
             return redirect('validacao_qr')
-
-        # Busca novamente o estado real do banco
-        ticket.refresh_from_db()
-
-        if ticket.token_qr != token:
-            messages.error(
-                request,
-                'Este QR Code foi substituído por outro.'
-            )
-        elif ticket.qr_validado_em is not None:
-            messages.error(
-                request,
-                'Este QR Code já foi validado.'
-            )
-        elif (
-            ticket.qr_expira_em is None
-            or ticket.qr_expira_em < agora
-        ):
-            messages.error(
-                request,
-                'QR Code expirado. O aluno deve renová-lo.'
-            )
-        else:
-            messages.error(
-                request,
-                'O ticket precisa estar chamado ou pronto '
-                'para permitir a validação.'
-            )
 
     return render(
         request,
