@@ -1,10 +1,29 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-troque-esta-chave-em-producao'
-DEBUG = True
-ALLOWED_HOSTS = []
+# Carrega variáveis locais do arquivo .env
+load_dotenv(BASE_DIR / ".env")
+
+# Configurações sensíveis
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
+
+# Modo de depuração
+DEBUG = os.getenv(
+    "DJANGO_DEBUG", "False"
+).strip().lower() == "true"
+
+# Hosts permitidos
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "DJANGO_ALLOWED_HOSTS", ""
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
