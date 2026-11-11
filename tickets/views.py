@@ -5,7 +5,7 @@ import qrcode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -39,6 +39,7 @@ def criar_usuario(request):
 
 @login_required
 def inicio(request):
+    # Verifica se o aluno já possui um ticket ativo
     ticket_ativo = Ticket.objects.filter(
         usuario=request.user
     ).exclude(
@@ -54,26 +55,69 @@ def inicio(request):
         if form.is_valid():
             chave = form.cleaned_data['chave_vale'].strip()
 
-            if Ticket.objects.filter(chave_vale=chave).exists():
+            # Verificação antecipada para melhorar
+            # a experiência do usuário
+            if Ticket.objects.filter(
+                chave_vale=chave
+            ).exists():
                 messages.error(
                     request,
                     'Essa chave já foi utilizada ou já está na fila.'
                 )
             else:
-                ticket = Ticket.objects.create(
-                    usuario=request.user,
-                    chave_vale=chave
-                )
+                try:
+                    with transaction.atomic():
+                        ticket = Ticket.objects.create(
+                            usuario=request.user,
+                            chave_vale=chave
+                        )
 
-                messages.success(
-                    request,
-                    f'Ticket #{ticket.pk} criado. Você entrou na fila.'
-                )
-                return redirect('meu_ticket')
+                except IntegrityError:
+                    # Outra requisição pode ter criado
+                    # um ticket para este aluno
+                    possui_ativo = Ticket.objects.filter(
+                        usuario=request.user
+                    ).exclude(
+                        status=Ticket.Status.RETIRADO
+                    ).exists()
+
+                    if possui_ativo:
+                        messages.warning(
+                            request,
+                            'Você já possui um ticket ativo.'
+                        )
+                        return redirect('meu_ticket')
+
+                    # A chave pode ter sido usada
+                    # por outra requisição
+                    if Ticket.objects.filter(
+                        chave_vale=chave
+                    ).exists():
+                        messages.error(
+                            request,
+                            'Essa chave já foi utilizada '
+                            'ou já está na fila.'
+                        )
+                    else:
+                        # Não esconder outros erros do banco
+                        raise
+
+                else:
+                    messages.success(
+                        request,
+                        f'Ticket #{ticket.pk} criado. '
+                        'Você entrou na fila.'
+                    )
+                    return redirect('meu_ticket')
+
     else:
         form = EntrarFilaForm()
 
-    return render(request, 'tickets/inicio.html', {'form': form})
+    return render(
+        request,
+        'tickets/inicio.html',
+        {'form': form}
+    )
 
 
 @login_required

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -208,6 +209,85 @@ class TicketWorkflowTests(TestCase):
         self.assertEqual(
             ticket.retirado_em,
             primeira_retirada
+        )
+
+
+    def test_impede_dois_tickets_ativos(self):
+        Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-ativo-001'
+        )
+
+        # Tenta criar um segundo ticket ativo
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Ticket.objects.create(
+                    usuario=self.aluno,
+                    chave_vale='vale-ativo-002'
+                )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).count(),
+            1
+        )
+
+
+    def test_permite_novo_ticket_apos_retirada(self):
+        # Ticket anterior já finalizado
+        Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-antigo-001',
+            status=Ticket.Status.RETIRADO
+        )
+
+        # Aluno entra novamente na fila
+        Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-novo-001'
+        )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).count(),
+            2
+        )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).exclude(
+                status=Ticket.Status.RETIRADO
+            ).count(),
+            1
+        )
+
+
+    def test_usuario_nao_entra_duas_vezes_na_fila(self):
+        self.client.force_login(self.aluno)
+
+        Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-ativo-003'
+        )
+
+        resposta = self.client.post(
+            reverse('inicio'),
+            {'chave_vale': 'vale-ativo-004'}
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse('meu_ticket')
+        )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).count(),
+            1
         )
 
 
