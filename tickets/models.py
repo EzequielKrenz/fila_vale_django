@@ -53,16 +53,28 @@ class Ticket(models.Model):
 
     class Meta:
         ordering = ['criado_em']
+
         indexes = [
             models.Index(
                 fields=['status', 'criado_em'],
                 name='ticket_status_criado_idx'
             ),
-            models.Index(fields=['token_qr'], name='ticket_token_qr_idx'),
+            models.Index(
+                fields=['token_qr'],
+                name='ticket_token_qr_idx'
+            ),
             models.Index(
                 fields=['qr_validado_em'],
                 name='ticket_qr_valid_idx'
             ),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario'],
+                condition=~models.Q(status='RETIRADO'),
+                name='ticket_unico_ativo_usuario'
+            )
         ]
 
     def __str__(self):

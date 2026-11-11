@@ -68,10 +68,19 @@
                         </small>
                     </div>
 
-                    <form method="post" action="{% url 'marcar_retirado' ticket.id %}">
-                        {% csrf_token %}
-                        <button class="btn dark" type="submit">Retirado</button>
-                    </form>
+                    {% if ticket.qr_validado_em %}
+                        <form method="post"
+                              action="{% url 'marcar_retirado' ticket.id %}">
+                            {% csrf_token %}
+                            <button class="btn dark" type="submit">
+                                Retirado
+                            </button>
+                        </form>
+                    {% else %}
+                        <button class="btn dark" type="button" disabled>
+                            Aguardando validação
+                        </button>
+                    {% endif %}
                 </div>
             {% endfor %}
         {% else %}
