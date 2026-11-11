@@ -4,6 +4,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import Ticket
+from .services.fila_service import (
+    TicketAtivoError,
+    ChaveJaUtilizadaError,
+    criar_ticket,
+)
 
 
 class TicketWorkflowTests(TestCase):
@@ -286,6 +291,75 @@ class TicketWorkflowTests(TestCase):
         self.assertEqual(
             Ticket.objects.filter(
                 usuario=self.aluno
+            ).count(),
+            1
+        )
+
+
+    def test_servico_cria_ticket(self):
+        ticket = criar_ticket(
+            usuario=self.aluno,
+            chave=' vale-servico-001 '
+        )
+
+        self.assertEqual(
+            ticket.chave_vale,
+            'vale-servico-001'
+        )
+
+        self.assertEqual(
+            ticket.status,
+            Ticket.Status.AGUARDANDO
+        )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).count(),
+            1
+        )
+
+
+    def test_servico_impede_ticket_ativo(self):
+        criar_ticket(
+            usuario=self.aluno,
+            chave='vale-servico-002'
+        )
+
+        with self.assertRaises(TicketAtivoError):
+            criar_ticket(
+                usuario=self.aluno,
+                chave='vale-servico-003'
+            )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                usuario=self.aluno
+            ).count(),
+            1
+        )
+
+
+    def test_servico_impede_chave_reutilizada(self):
+        outro_aluno = User.objects.create_user(
+            username='outro-aluno',
+            password='senha-de-teste'
+        )
+
+        criar_ticket(
+            usuario=self.aluno,
+            chave='vale-servico-004'
+        )
+
+        with self.assertRaises(ChaveJaUtilizadaError):
+            criar_ticket(
+                usuario=outro_aluno,
+                chave='vale-servico-004'
+            )
+
+        self.assertEqual(
+            Ticket.objects.filter(
+                chave_vale='vale-servico-004'
             ).count(),
             1
         )

@@ -5,7 +5,7 @@ import qrcode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Count
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -14,6 +14,12 @@ from django.utils import timezone
 
 from .forms import CriarUsuarioForm, EntrarFilaForm, ValidarQRForm
 from .models import Ticket
+from .services.fila_service import (
+    TicketAtivoError,
+    ChaveJaUtilizadaError,
+    buscar_ticket_ativo,
+    criar_ticket,
+)
 
 
 def eh_staff(user):
@@ -39,12 +45,9 @@ def criar_usuario(request):
 
 @login_required
 def inicio(request):
-    # Verifica se o aluno já possui um ticket ativo
-    ticket_ativo = Ticket.objects.filter(
-        usuario=request.user
-    ).exclude(
-        status=Ticket.Status.RETIRADO
-    ).order_by('-criado_em').first()
+
+    # Consulta o serviço para identificar ticket ativo
+    ticket_ativo = buscar_ticket_ativo(request.user)
 
     if ticket_ativo:
         return redirect('meu_ticket')
@@ -53,62 +56,35 @@ def inicio(request):
         form = EntrarFilaForm(request.POST)
 
         if form.is_valid():
-            chave = form.cleaned_data['chave_vale'].strip()
+            chave = form.cleaned_data['chave_vale']
 
-            # Verificação antecipada para melhorar
-            # a experiência do usuário
-            if Ticket.objects.filter(
-                chave_vale=chave
-            ).exists():
+            try:
+                ticket = criar_ticket(
+                    usuario=request.user,
+                    chave=chave
+                )
+
+            except TicketAtivoError:
+                messages.warning(
+                    request,
+                    'Você já possui um ticket ativo.'
+                )
+                return redirect('meu_ticket')
+
+            except ChaveJaUtilizadaError:
                 messages.error(
                     request,
-                    'Essa chave já foi utilizada ou já está na fila.'
+                    'Essa chave já foi utilizada '
+                    'ou já está na fila.'
                 )
+
             else:
-                try:
-                    with transaction.atomic():
-                        ticket = Ticket.objects.create(
-                            usuario=request.user,
-                            chave_vale=chave
-                        )
-
-                except IntegrityError:
-                    # Outra requisição pode ter criado
-                    # um ticket para este aluno
-                    possui_ativo = Ticket.objects.filter(
-                        usuario=request.user
-                    ).exclude(
-                        status=Ticket.Status.RETIRADO
-                    ).exists()
-
-                    if possui_ativo:
-                        messages.warning(
-                            request,
-                            'Você já possui um ticket ativo.'
-                        )
-                        return redirect('meu_ticket')
-
-                    # A chave pode ter sido usada
-                    # por outra requisição
-                    if Ticket.objects.filter(
-                        chave_vale=chave
-                    ).exists():
-                        messages.error(
-                            request,
-                            'Essa chave já foi utilizada '
-                            'ou já está na fila.'
-                        )
-                    else:
-                        # Não esconder outros erros do banco
-                        raise
-
-                else:
-                    messages.success(
-                        request,
-                        f'Ticket #{ticket.pk} criado. '
-                        'Você entrou na fila.'
-                    )
-                    return redirect('meu_ticket')
+                messages.success(
+                    request,
+                    f'Ticket #{ticket.pk} criado. '
+                    'Você entrou na fila.'
+                )
+                return redirect('meu_ticket')
 
     else:
         form = EntrarFilaForm()
