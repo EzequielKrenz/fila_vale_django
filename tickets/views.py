@@ -251,18 +251,28 @@ def marcar_retirado(request, ticket_id):
 
     ticket = get_object_or_404(Ticket, pk=ticket_id)
 
-    if ticket.status != Ticket.Status.PRONTO:
+    # Confirma que o ticket está pronto e validado
+    atualizados = Ticket.objects.filter(
+        pk=ticket.pk,
+        status=Ticket.Status.PRONTO,
+        qr_validado_em__isnull=False
+    ).update(
+        status=Ticket.Status.RETIRADO,
+        retirado_em=timezone.now()
+    )
+
+    if atualizados == 1:
+        messages.success(
+            request,
+            f'Ticket #{ticket.pk} retirado com sucesso.'
+        )
+    else:
         messages.error(
             request,
-            'Somente tickets prontos podem ser marcados como retirados.'
+            'Não foi possível finalizar o ticket. '
+            'Ele precisa estar pronto e ter o QR Code validado.'
         )
-        return redirect('painel_admin')
 
-    ticket.status = Ticket.Status.RETIRADO
-    ticket.retirado_em = timezone.now()
-    ticket.save(update_fields=['status', 'retirado_em'])
-
-    messages.success(request, f'Ticket #{ticket.pk} finalizado.')
     return redirect('painel_admin')
 
 

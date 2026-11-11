@@ -147,6 +147,70 @@ class TicketWorkflowTests(TestCase):
         self.assertIsNotNone(ticket.qr_validado_em)
 
 
+    def test_nao_retirar_sem_validacao(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-retirada-001',
+            status=Ticket.Status.PRONTO
+        )
+
+        self.client.force_login(self.gestor)
+
+        self.client.post(
+            reverse('marcar_retirado', args=[ticket.pk])
+        )
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(
+            ticket.status,
+            Ticket.Status.PRONTO
+        )
+        self.assertIsNone(ticket.retirado_em)
+
+
+    def test_retirar_apos_validacao(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-retirada-002',
+            status=Ticket.Status.PRONTO
+        )
+
+        self.client.force_login(self.gestor)
+
+        # Valida o QR Code
+        self.client.post(
+            reverse('validar_token_qr', args=[ticket.token_qr])
+        )
+
+        # Registra a retirada
+        self.client.post(
+            reverse('marcar_retirado', args=[ticket.pk])
+        )
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(
+            ticket.status,
+            Ticket.Status.RETIRADO
+        )
+        self.assertIsNotNone(ticket.retirado_em)
+
+        # Tenta retirar novamente
+        primeira_retirada = ticket.retirado_em
+
+        self.client.post(
+            reverse('marcar_retirado', args=[ticket.pk])
+        )
+
+        ticket.refresh_from_db()
+
+        self.assertEqual(
+            ticket.retirado_em,
+            primeira_retirada
+        )
+
+
 class CriarUsuarioTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
