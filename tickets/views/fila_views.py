@@ -4,7 +4,6 @@ from django.contrib.auth.decorators import (
     login_required,
     user_passes_test,
 )
-from django.db import transaction
 from django.shortcuts import (
     render,
     redirect,
@@ -20,6 +19,9 @@ from ..services.fila_service import (
     ChaveJaUtilizadaError,
     buscar_ticket_ativo,
     criar_ticket,
+    FilaAtualizadaError,
+    chamar_proximo_ticket,
+    marcar_ticket_pronto,
 )
 
 
@@ -155,69 +157,48 @@ def painel_admin(request):
 
 
 @user_passes_test(eh_staff, login_url='login')
-@transaction.atomic
 def chamar_proximo(request):
     if request.method != 'POST':
         return redirect('painel_admin')
 
-    ticket = Ticket.objects.select_for_update().filter(
-        status=Ticket.Status.AGUARDANDO
-    ).order_by('criado_em').first()
-
-    if not ticket:
+    try:
+        ticket_id = chamar_proximo_ticket()
+    except FilaAtualizadaError:
         messages.warning(
             request,
-            'Não há ninguém aguardando na fila.'
+            'A fila mudou durante a chamada. Tente novamente.'
         )
-        return redirect('painel_admin')
-
-    ticket.status = Ticket.Status.CHAMADO
-    ticket.chamado_em = timezone.now()
-
-    ticket.save(
-        update_fields=['status', 'chamado_em']
-    )
-
-    messages.success(
-        request,
-        f'Ticket #{ticket.pk} foi chamado.'
-    )
+    else:
+        if ticket_id is None:
+            messages.warning(
+                request, 'Não há ninguém aguardando na fila.'
+            )
+        else:
+            messages.success(
+                request, f'Ticket #{ticket_id} foi chamado.'
+            )
 
     return redirect('painel_admin')
-
 
 @user_passes_test(eh_staff, login_url='login')
 def marcar_pronto(request, ticket_id):
     if request.method != 'POST':
         return redirect('painel_admin')
 
-    ticket = get_object_or_404(
-        Ticket,
-        pk=ticket_id
-    )
+    ticket = get_object_or_404(Ticket, pk=ticket_id)
 
-    if ticket.status != Ticket.Status.CHAMADO:
+    if marcar_ticket_pronto(ticket.pk):
+        messages.success(
+            request, f'Ticket #{ticket.pk} marcado como pronto.'
+        )
+    else:
         messages.error(
             request,
             'Somente tickets chamados podem '
             'ser marcados como prontos.'
         )
-        return redirect('painel_admin')
-
-    ticket.status = Ticket.Status.PRONTO
-    ticket.pronto_em = timezone.now()
-
-    ticket.save(
-        update_fields=['status', 'pronto_em']
-    )
-
-    messages.success(
-        request,
-        f'Ticket #{ticket.pk} marcado como pronto.'
-    )
 
     return redirect('painel_admin')
-
 
 @user_passes_test(eh_staff, login_url='login')
 def marcar_retirado(request, ticket_id):

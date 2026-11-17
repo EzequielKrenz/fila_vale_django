@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +12,10 @@ from .services.fila_service import (
     TicketAtivoError,
     ChaveJaUtilizadaError,
     criar_ticket,
+    FilaAtualizadaError,
+    chamar_ticket_aguardando,
+    chamar_proximo_ticket,
+    marcar_ticket_pronto,
 )
 from .services.voucher_service import (
     VoucherJaValidadoError,
@@ -462,6 +467,74 @@ class TicketWorkflowTests(TestCase):
 
         ticket.refresh_from_db()
         self.assertIsNone(ticket.qr_validado_em)
+
+
+    def test_servico_chama_por_ordem_de_chegada(self):
+        outro_aluno = User.objects.create_user(
+            username='aluno-dois',
+            password='senha-de-teste'
+        )
+        primeiro = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-fila-001'
+        )
+        segundo = Ticket.objects.create(
+            usuario=outro_aluno,
+            chave_vale='vale-fila-002'
+        )
+
+        self.assertEqual(chamar_proximo_ticket(), primeiro.pk)
+        self.assertEqual(chamar_proximo_ticket(), segundo.pk)
+        self.assertIsNone(chamar_proximo_ticket())
+
+        primeiro.refresh_from_db()
+        segundo.refresh_from_db()
+        self.assertEqual(primeiro.status, Ticket.Status.CHAMADO)
+        self.assertEqual(segundo.status, Ticket.Status.CHAMADO)
+        self.assertIsNotNone(primeiro.chamado_em)
+        self.assertIsNotNone(segundo.chamado_em)
+
+    def test_chamada_de_ticket_e_idempotente(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-fila-003'
+        )
+
+        self.assertTrue(chamar_ticket_aguardando(ticket.pk))
+        ticket.refresh_from_db()
+        primeiro_horario = ticket.chamado_em
+
+        self.assertFalse(chamar_ticket_aguardando(ticket.pk))
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.chamado_em, primeiro_horario)
+
+    def test_marcar_pronto_e_idempotente(self):
+        ticket = Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-fila-004',
+            status=Ticket.Status.CHAMADO
+        )
+
+        self.assertTrue(marcar_ticket_pronto(ticket.pk))
+        ticket.refresh_from_db()
+        primeiro_horario = ticket.pronto_em
+
+        self.assertFalse(marcar_ticket_pronto(ticket.pk))
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.pronto_em, primeiro_horario)
+
+    def test_chamada_detecta_fila_alterada(self):
+        Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale='vale-fila-005'
+        )
+
+        with patch(
+            'tickets.services.fila_service.chamar_ticket_aguardando',
+            return_value=False,
+        ):
+            with self.assertRaises(FilaAtualizadaError):
+                chamar_proximo_ticket()
 
 
 class CriarUsuarioTests(TestCase):
