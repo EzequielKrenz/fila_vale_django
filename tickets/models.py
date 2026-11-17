@@ -1,8 +1,10 @@
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
 import uuid
+import secrets
 
 
 class Ticket(models.Model):
@@ -129,3 +131,30 @@ class Ticket(models.Model):
         self.qr_expira_em = nova_expiracao
 
         return True
+
+
+def gerar_chave_vale():
+    """Gera uma chave imprevisível para um vale previamente emitido."""
+    return secrets.token_urlsafe(18)
+
+
+class ValeEmitido(models.Model):
+    chave = models.CharField(
+        max_length=50,
+        unique=True,
+        default=gerar_chave_vale,
+        editable=False,
+    )
+    aluno = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='vales_emitidos',
+    )
+    ativo = models.BooleanField(default=True)
+    emitido_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-emitido_em']
+
+    def __str__(self):
+        return f'Vale #{self.pk} - {self.aluno.username}'

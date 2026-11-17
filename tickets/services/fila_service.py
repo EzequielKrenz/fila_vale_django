@@ -1,6 +1,6 @@
 from django.db import IntegrityError, transaction
 
-from tickets.models import Ticket
+from tickets.models import Ticket, ValeEmitido
 
 
 class TicketAtivoError(Exception):
@@ -10,6 +10,11 @@ class TicketAtivoError(Exception):
 
 class ChaveJaUtilizadaError(Exception):
     """A chave do vale já foi utilizada."""
+    pass
+
+
+class ValeNaoAutorizadoError(Exception):
+    """A chave não foi emitida para este aluno ou está inativa."""
     pass
 
 
@@ -39,7 +44,19 @@ def criar_ticket(usuario, chave):
             'O usuário já possui um ticket ativo.'
         )
 
-    # Regra 2: a chave do vale deve ser única
+    # Regra 2: a chave deve ter sido emitida para o aluno e estar ativa
+    vale_autorizado = ValeEmitido.objects.filter(
+        aluno=usuario,
+        chave=chave,
+        ativo=True,
+    ).exists()
+
+    if not vale_autorizado:
+        raise ValeNaoAutorizadoError(
+            'Chave inválida ou não autorizada para este aluno.'
+        )
+
+    # Regra 3: um vale não pode gerar dois tickets
     if Ticket.objects.filter(chave_vale=chave).exists():
         raise ChaveJaUtilizadaError(
             'Esta chave já foi utilizada.'

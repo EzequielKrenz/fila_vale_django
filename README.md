@@ -129,10 +129,9 @@ Instale:
 pip install -r requirements.txt
 ```
 
-Crie as migrações:
+Aplique as migrações existentes:
 
 ```bash
-python manage.py makemigrations
 python manage.py migrate
 ```
 
@@ -168,10 +167,32 @@ Para criar gestores ou administrar qualquer conta, use o `/admin/`:
 - aluno: usuário comum;
 - gestor/cantina: marque `Staff status`.
 
-## Observação sobre a chave primária
+## Configuração obrigatória do ambiente
 
-Neste protótipo, a chave informada pelo aluno é tratada como identificador único
-do vale e não pode ser reutilizada.
+Crie `.env` na raiz (usando `.env.example` como referência) e defina
+`DJANGO_SECRET_KEY`, `DJANGO_DEBUG` e `DJANGO_ALLOWED_HOSTS`.
+Não envie o arquivo `.env` ao GitHub.
 
-Em uma implantação real, o ideal é ter uma tabela de vales previamente emitidos
-e validar se a chave existe, pertence ao aluno e ainda não foi consumida.
+Aplique as migrações existentes com `python manage.py migrate`.
+
+## Emissão e validação das chaves de vale
+
+Um administrador precisa **emitir o vale antes de o aluno entrar na fila**:
+
+1. Crie a conta do aluno no Django.
+2. Acesse `/admin/` como superusuário.
+3. Entre em **Vales emitidos**, clique em adicionar e selecione o aluno.
+4. Salve o registro. O sistema gerará uma chave aleatória automaticamente.
+5. Entregue a chave ao aluno por um canal apropriado.
+
+O aluno só pode criar um ticket se a chave foi emitida para sua conta,
+está ativa e não foi usada antes. Desativar um vale impede novas entradas
+com ele; não cancela tickets já emitidos.
+
+**Compatibilidade:** tickets antigos não são apagados nem alterados por
+essa migração. Entretanto, chaves antigas ainda não utilizadas precisam
+ser cadastradas no sistema de emissão antes de serem aceitas.
+
+Esta é uma emissão local pelo Django Admin, **sem integração automática**
+com o sistema externo de vale-alimentação. Para uso institucional, será
+necessário alinhar a origem e a importação dos vales reais.

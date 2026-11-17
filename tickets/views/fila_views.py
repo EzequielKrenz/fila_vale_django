@@ -18,6 +18,7 @@ from ..permissions import eh_staff
 from ..services.fila_service import (
     TicketAtivoError,
     ChaveJaUtilizadaError,
+    ValeNaoAutorizadoError,
     buscar_ticket_ativo,
     criar_ticket,
 )
@@ -48,6 +49,12 @@ def inicio(request):
                     'Você já possui um ticket ativo.'
                 )
                 return redirect('meu_ticket')
+
+            except ValeNaoAutorizadoError:
+                messages.error(
+                    request,
+                    'Chave de vale inválida ou não autorizada para sua conta.'
+                )
 
             except ChaveJaUtilizadaError:
                 messages.error(

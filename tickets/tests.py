@@ -6,10 +6,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Ticket
+from .models import Ticket, ValeEmitido
 from .services.fila_service import (
     TicketAtivoError,
     ChaveJaUtilizadaError,
+    ValeNaoAutorizadoError,
     criar_ticket,
 )
 from .services.voucher_service import (
@@ -34,6 +35,9 @@ class TicketWorkflowTests(TestCase):
         )
 
     def test_ticket_and_qr_validation_workflow(self):
+        ValeEmitido.objects.create(
+            aluno=self.aluno, chave='vale-teste-001'
+        )
         self.client.login(username='aluno', password='senha-de-teste')
 
         response = self.client.get(reverse('inicio'))
@@ -307,6 +311,9 @@ class TicketWorkflowTests(TestCase):
 
 
     def test_servico_cria_ticket(self):
+        ValeEmitido.objects.create(
+            aluno=self.aluno, chave='vale-servico-001'
+        )
         ticket = criar_ticket(
             usuario=self.aluno,
             chave=' vale-servico-001 '
@@ -331,6 +338,9 @@ class TicketWorkflowTests(TestCase):
 
 
     def test_servico_impede_ticket_ativo(self):
+        ValeEmitido.objects.create(
+            aluno=self.aluno, chave='vale-servico-002'
+        )
         criar_ticket(
             usuario=self.aluno,
             chave='vale-servico-002'
@@ -351,28 +361,79 @@ class TicketWorkflowTests(TestCase):
 
 
     def test_servico_impede_chave_reutilizada(self):
-        outro_aluno = User.objects.create_user(
-            username='outro-aluno',
-            password='senha-de-teste'
+        ValeEmitido.objects.create(
+            aluno=self.aluno, chave='vale-servico-004'
         )
-
-        criar_ticket(
+        ticket = criar_ticket(
             usuario=self.aluno,
             chave='vale-servico-004'
         )
+        ticket.status = Ticket.Status.RETIRADO
+        ticket.save(update_fields=['status'])
 
         with self.assertRaises(ChaveJaUtilizadaError):
             criar_ticket(
-                usuario=outro_aluno,
+                usuario=self.aluno,
                 chave='vale-servico-004'
             )
 
         self.assertEqual(
-            Ticket.objects.filter(
-                chave_vale='vale-servico-004'
-            ).count(),
-            1
+            Ticket.objects.filter(chave_vale='vale-servico-004').count(),
+            1,
         )
+
+    def test_servico_rejeita_chave_nao_emitida(self):
+        with self.assertRaises(ValeNaoAutorizadoError):
+            criar_ticket(
+                usuario=self.aluno,
+                chave='chave-inventada'
+            )
+        self.assertFalse(Ticket.objects.exists())
+
+    def test_servico_rejeita_vale_de_outro_aluno(self):
+        outro = User.objects.create_user(
+            username='aluno-externo', password='senha-de-teste'
+        )
+        ValeEmitido.objects.create(
+            aluno=outro, chave='vale-de-outro-aluno'
+        )
+        with self.assertRaises(ValeNaoAutorizadoError):
+            criar_ticket(
+                usuario=self.aluno,
+                chave='vale-de-outro-aluno'
+            )
+        self.assertFalse(Ticket.objects.exists())
+
+    def test_servico_rejeita_vale_inativo(self):
+        ValeEmitido.objects.create(
+            aluno=self.aluno,
+            chave='vale-inativo-001',
+            ativo=False,
+        )
+        with self.assertRaises(ValeNaoAutorizadoError):
+            criar_ticket(
+                usuario=self.aluno,
+                chave='vale-inativo-001'
+            )
+        self.assertFalse(Ticket.objects.exists())
+
+    def test_vale_gera_chave_automatica(self):
+        vale = ValeEmitido.objects.create(aluno=self.aluno)
+        self.assertGreaterEqual(len(vale.chave), 20)
+        self.assertEqual(ValeEmitido.objects.filter(chave=vale.chave).count(), 1)
+
+    def test_formulario_recusa_chave_nao_autorizada(self):
+        self.client.force_login(self.aluno)
+        response = self.client.post(
+            reverse('inicio'),
+            {'chave_vale': 'vale-nao-emitido'}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Chave de vale inválida ou não autorizada para sua conta.'
+        )
+        self.assertFalse(Ticket.objects.exists())
 
 
     def test_servico_valida_voucher(self):
