@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from tickets.models import Ticket
 
@@ -68,3 +69,53 @@ def criar_ticket(usuario, chave):
         raise
 
     return ticket
+
+
+class FilaAtualizadaError(Exception):
+    """O próximo ticket mudou antes de ser chamado."""
+
+
+def chamar_ticket_aguardando(ticket_id):
+    """Troca AGUARDANDO por CHAMADO uma única vez."""
+    atualizados = Ticket.objects.filter(
+        pk=ticket_id,
+        status=Ticket.Status.AGUARDANDO,
+    ).update(
+        status=Ticket.Status.CHAMADO,
+        chamado_em=timezone.now(),
+    )
+    return atualizados == 1
+
+
+def chamar_proximo_ticket():
+    """
+    Chama o primeiro ticket aguardando.
+
+    Retorna o ID ou None se a fila estiver vazia.
+    Se outro funcionário alterou o ticket, solicita nova tentativa.
+    """
+    proximo = Ticket.objects.filter(
+        status=Ticket.Status.AGUARDANDO
+    ).order_by('criado_em', 'pk').first()
+
+    if proximo is None:
+        return None
+
+    if not chamar_ticket_aguardando(proximo.pk):
+        raise FilaAtualizadaError(
+            'A fila foi atualizada por outro funcionário.'
+        )
+
+    return proximo.pk
+
+
+def marcar_ticket_pronto(ticket_id):
+    """Troca CHAMADO por PRONTO uma única vez."""
+    atualizados = Ticket.objects.filter(
+        pk=ticket_id,
+        status=Ticket.Status.CHAMADO,
+    ).update(
+        status=Ticket.Status.PRONTO,
+        pronto_em=timezone.now(),
+    )
+    return atualizados == 1
