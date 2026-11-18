@@ -1,12 +1,15 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import Ticket
+from .services.relatorio_service import calcular_resumo_consumo
 from .services.fila_service import (
     TicketAtivoError,
     ChaveJaUtilizadaError,
@@ -508,3 +511,80 @@ class CriarUsuarioTests(TestCase):
             response,
             'Solicite a criação ao administrador do sistema.'
         )
+
+
+@override_settings(TIME_ZONE='America/Sao_Paulo', USE_TZ=True)
+class RelatorioFusoHorarioTests(TestCase):
+    def setUp(self):
+        self.aluno = User.objects.create_user(
+            username='relatorio-aluno', password='senha-de-teste'
+        )
+        self.gestor = User.objects.create_user(
+            username='relatorio-gestor',
+            password='senha-de-teste',
+            is_staff=True,
+        )
+        self.fuso = ZoneInfo('America/Sao_Paulo')
+
+    def registrar_consumo(self, chave, ano, mes, dia, hora, minuto):
+        return Ticket.objects.create(
+            usuario=self.aluno,
+            chave_vale=chave,
+            status=Ticket.Status.RETIRADO,
+            qr_validado_em=datetime(
+                ano, mes, dia, hora, minuto, tzinfo=self.fuso
+            ),
+        )
+
+    def test_contagens_usam_dia_local_e_ignoram_futuro(self):
+        agora = datetime(2026, 11, 17, 12, 0, tzinfo=self.fuso)
+
+        self.registrar_consumo('consumo-domingo', 2026, 11, 15, 23, 59)
+        self.registrar_consumo('consumo-segunda', 2026, 11, 16, 23, 59)
+        self.registrar_consumo('consumo-terca-1', 2026, 11, 17, 0, 1)
+        self.registrar_consumo('consumo-terca-2', 2026, 11, 17, 11, 59)
+        self.registrar_consumo('consumo-futuro', 2026, 11, 17, 13, 0)
+        self.registrar_consumo('consumo-mes-anterior', 2026, 10, 31, 23, 59)
+
+        resumo = calcular_resumo_consumo(agora=agora)
+
+        self.assertEqual(resumo['diario'], 2)
+        self.assertEqual(resumo['semanal'], 3)
+        self.assertEqual(resumo['mensal'], 4)
+        totais = {
+            item['dia']: item['total']
+            for item in resumo['ultimos_7']
+        }
+        self.assertEqual(totais['15/11'], 1)
+        self.assertEqual(totais['16/11'], 1)
+        self.assertEqual(totais['17/11'], 2)
+
+        self.client.force_login(self.gestor)
+        with patch(
+            'tickets.services.relatorio_service.timezone.now',
+            return_value=agora,
+        ):
+            resposta = self.client.get(reverse('relatorios'))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context['diario'], 2)
+        self.assertEqual(resposta.context['semanal'], 3)
+        self.assertEqual(resposta.context['mensal'], 4)
+
+    def test_virada_de_ano_e_mes(self):
+        agora = datetime(2027, 1, 1, 10, 0, tzinfo=self.fuso)
+
+        self.registrar_consumo('fim-do-ano', 2026, 12, 31, 23, 59)
+        self.registrar_consumo('inicio-do-ano', 2027, 1, 1, 0, 1)
+
+        resumo = calcular_resumo_consumo(agora=agora)
+
+        self.assertEqual(resumo['diario'], 1)
+        self.assertEqual(resumo['semanal'], 2)
+        self.assertEqual(resumo['mensal'], 1)
+        totais = {
+            item['dia']: item['total']
+            for item in resumo['ultimos_7']
+        }
+        self.assertEqual(totais['31/12'], 1)
+        self.assertEqual(totais['01/01'], 1)
