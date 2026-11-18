@@ -158,6 +158,17 @@ python manage.py runserver
 - Relatórios: http://127.0.0.1:8000/relatorios/
 - Django Admin: http://127.0.0.1:8000/admin/
 
+## Política de senhas
+
+O formulário de criação de usuários utiliza os validadores padrão do Django:
+mínimo de 8 caracteres, bloqueio de senhas comuns, senhas somente numéricas
+e senhas muito semelhantes aos dados do usuário.
+
+Essas verificações se aplicam ao fluxo de cadastro que usa
+`UserCreationForm`. A criação direta via `User.objects.create_user()`
+não executa automaticamente esses validadores; integrações próprias devem
+chamar `validate_password()` explicitamente.
+
 ## Criando alunos e gestores
 
 Um gestor autenticado pode criar contas comuns pelo link **Criar usuário** no menu

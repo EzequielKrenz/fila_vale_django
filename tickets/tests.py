@@ -581,3 +581,48 @@ class CriarUsuarioTests(TestCase):
             response,
             'Solicite a criação ao administrador do sistema.'
         )
+
+def test_senha_curta_e_rejeitada(self):
+        self.client.force_login(self.admin)
+        resposta = self.client.post(reverse('criar_usuario'), {
+            'username': 'aluno-curta',
+            'password1': 'Ab1!',
+            'password2': 'Ab1!',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('password2', resposta.context['form'].errors)
+        self.assertFalse(User.objects.filter(username='aluno-curta').exists())
+
+    def test_senha_numerica_e_rejeitada(self):
+        self.client.force_login(self.admin)
+        resposta = self.client.post(reverse('criar_usuario'), {
+            'username': 'aluno-numerico',
+            'password1': '1234567890',
+            'password2': '1234567890',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('password2', resposta.context['form'].errors)
+        self.assertFalse(User.objects.filter(username='aluno-numerico').exists())
+
+    def test_senha_comum_e_rejeitada(self):
+        self.client.force_login(self.admin)
+        resposta = self.client.post(reverse('criar_usuario'), {
+            'username': 'aluno-comum',
+            'password1': 'password',
+            'password2': 'password',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('password2', resposta.context['form'].errors)
+        self.assertFalse(User.objects.filter(username='aluno-comum').exists())
+
+    def test_senha_igual_ao_usuario_e_rejeitada(self):
+        self.client.force_login(self.admin)
+        resposta = self.client.post(reverse('criar_usuario'), {
+            'username': 'alunoteste',
+            'password1': 'alunoteste',
+            'password2': 'alunoteste',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('password2', resposta.context['form'].errors)
+        self.assertFalse(User.objects.filter(username='alunoteste').exists())
+
